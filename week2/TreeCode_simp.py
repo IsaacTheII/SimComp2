@@ -12,7 +12,8 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-from week2.Particle import Particle
+from Particle import Particle
+from time import time
 
 
 class Cell:
@@ -20,70 +21,89 @@ class Cell:
         self.bot = np.array(lowerleft)
         self.top = np.array(upperright)
         self.mass = 0
-        # self.length = 0             TODO: is it faster to have a dedicated variable or to implemnetn len()
         self.max_s = max_size
         self.max_radius = np.linalg.norm(self.top - self.bot) / 2
         self.parent = parent
         self.particles = []
         self.isLeaf = True
-        self.has_bary_weight = False
+        self.pivot: float
+        self.split_Dim: int
+        self.has_bary_weight = False  # probalby better to just calc for all branches since every cell will
+        self.center = None  # need to be calc at some point.
+        self.child_bot: Cell
+        self.child_top: Cell
 
     def __len__(self):
         return self.particles.__len__()
 
-    def re_center_weight(self):
-        self.has_bary_weight = False
-        if not self.isLeaf:
-            self.child_bot.re_center_weight()
-            self.child_top.re_center_weight()
+    def get_particles(self):
+        particles_array = []
+        cell_queue = [self]
+        while cell_queue:
+            cell = cell_queue.pop()
+            if cell.isLeaf:
+                particles_array += cell.particles
+            else:
+                cell_queue += [cell.child_bot, cell.child_top]
+        return particles_array
 
     def calc_bary_weight(self):
-        self.bary = np.zeros_like(self.top)
-        self.mass = 0
-        for p in self.particles:
-            self.bary += p.r * p.mass
-            self.mass += p.mass
-        self.bary /= self.mass
+        if self.isLeaf:
+            self.mass = 0
+            self.center, i = float(0), int(0)
+            p: Particle
+            for p in self.particles:
+                self.mass += p.mass
+                self.center += p.r * p.mass
+            if self.mass == 0:
+                print("error")
+                pass
+            self.center /= self.mass
+        else:
+            bot_mass, bot_center = self.child_bot.calc_bary_weight()
+            top_mass, top_center = self.child_top.calc_bary_weight()
+            self.mass = bot_mass + top_mass
+            self.center = (bot_center * bot_mass + top_center * top_mass) / self.mass
+        return self.mass, self.center
 
-    def split(self):
+    def split(self, particle_arr):
         self.isLeaf = False
-        self.split_Dim = np.argmax((self.top - self.bot)) ** 2
+        self.split_Dim = np.argmax((self.top - self.bot) ** 2)
 
         self.pivot, i = float(0), int(0)
-        for p in self.particles:
+        for p in particle_arr:
             i += 1
             self.pivot += p.r[self.split_Dim]
         self.pivot /= i
 
         particle_bot, particle_top = [], []
-        for p in self.particles:
+        for p in particle_arr:
             if p.r[self.split_Dim] < self.pivot:
                 particle_bot.append(p)
             else:
                 particle_top.append(p)
         # only works if insert return self
-        self.child_bot = Cell(self.bot, np.copy(self.top).put(self.split_Dim, self.pivot)).insert(particle_bot)
-        self.child_top = Cell(np.copy(self.bot).put(self.split_Dim, self.pivot), self.top).insert(particle_top)
+        new_upper = np.copy(self.top)
+        new_upper.put(self.split_Dim, self.pivot)
+        new_lower = np.copy(self.bot)
+        new_lower.put(self.split_Dim, self.pivot)
+        self.child_bot = Cell(self.bot, new_upper, self.max_s, self).insert(particle_bot)
+        self.child_top = Cell(new_lower, self.top, self.max_s, self).insert(particle_top)
 
     def insert(self, particles_array):
-        for p in particles_array:
-            self.mass += p.mass
-        self.particles = np.concatenate((self.particles, particles_array))
-        if not self.isLeaf:
-            particle_bot, particle_top = [], []
-            for p in self.particles:
-                if p.r[self.split_Dim] < self.pivot:
-                    particle_bot.append(p)
-                else:
-                    particle_top.append(p)
-
-            self.child_bot.insert(particle_bot)
-            self.child_top.insert(particle_top)
+        if len(particles_array) > self.max_s:
+            self.split(particles_array)
         else:
-            if (len(self) > self.max_s):
-                self.split()
+            self.isLeaf = True
+            self.particles = particles_array
         return self
 
+    def reorder_tree(self):
+        particles_array = self.get_particles()
+        self.insert(particles_array)
+        return self
+
+    # this code is not yet update to the new tree structure
     """
     def ballwalk(self, pos_vec: np.ndarray, max_dist: float) -> list:
         particles_inrange = []
@@ -145,47 +165,97 @@ class Cell:
             ax.add_patch(plt.Rectangle((self.bot[0], self.bot[1]), with_height[0], with_height[1], facecolor='none',
                                        edgecolor='lightgreen'))
         else:
-            for cell in self.child.values():
-                cell.draw_Cells(ax)
+            self.child_bot.draw_Cells(ax)
+            self.child_top.draw_Cells(ax)
         return
+
+    def ani_Cells(self, ax, artist):
+        if self.isLeaf:
+            x, y = [], []
+            for p in self.particles:
+                x.append(p.r[0])
+                y.append(p.r[1])
+            artist.append(ax.scatter(x, y, c='blue', alpha=.5))
+            # with_height = self.top - self.bot
+            # artist.append(
+            #     ax.add_patch(plt.Rectangle((self.bot[0], self.bot[1]), with_height[0], with_height[1], facecolor='none',
+            #                                edgecolor='lightgreen')))
+        else:
+            artist.append(self.child_bot.draw_Cells(ax))
+            artist.append(self.child_top.draw_Cells(ax))
+        return artist
 
     def get_forces(self, particle, theta):
         # theta should be in rad
         def get_theta(vec_center, vec_corner):
             return np.arccos(np.dot(vec_center, vec_corner) / (np.linalg.norm(vec_center) * np.linalg.norm(vec_corner)))
 
-        # this fucntion assumes that the tree has been weight and barycenters has been determend
+        # this function assumes that the tree has been weight and barycenter has been determent
         cell_queue = [self]
-        force = np.zeros_like(particle)
-        while len(cell_queue) > 0:
+        force = np.zeros_like(particle.v)
+        while cell_queue:
             cell = cell_queue.pop(0)
             # TODO better theta cone check
-            # if theta > 2 * np.arctan(cell.max_radius/np.linalg.norm(((cell.bot + cell.top) / 2) - particle.r)):
-
             # this should perform better. if the box is long and thin towards the direction of the particle
             # TODO verify what subset of corners is enough to guarantee to find the largest theta
             # TODO check if approximation as sphere is faster in the general case.
-            cell_center = (cell.top + cell.bot) / 2
-            t = max(get_theta(cell_center - particle.r, cell.top - particle.r),
-                    get_theta(cell_center - particle.r, cell.top.put(0, cell.bot[0]) - particle.r),
-                    get_theta(cell_center - particle.r, cell.top.put(1, cell.bot[1]) - particle.r),
-                    get_theta(cell_center - particle.r, cell.bot.put(2, cell.top[2]) - particle.r),
-                    get_theta(cell_center - particle.r, cell.bot - particle.r),
-                    get_theta(cell_center - particle.r, cell.bot.put(0, cell.top[0]) - particle.r),
-                    get_theta(cell_center - particle.r, cell.bot.put(1, cell.top[1]) - particle.r),
-                    get_theta(cell_center - particle.r, cell.top.put(2, cell.bot[2]) - particle.r))
+            # cell_center = (cell.top + cell.bot) / 2
+            # t = max(get_theta(cell_center - particle.r, cell.top - particle.r),
+            #         get_theta(cell_center - particle.r, np.array([cell.bot[0], cell.top[1], cell.top[2]]) - particle.r),
+            #         get_theta(cell_center - particle.r, np.array([cell.top[0], cell.bot[1], cell.top[2]]) - particle.r),
+            #         get_theta(cell_center - particle.r, np.array([cell.top[0], cell.top[1], cell.bot[2]]) - particle.r),
+            #         get_theta(cell_center - particle.r, cell.bot - particle.r),
+            #         get_theta(cell_center - particle.r, np.array([cell.top[0], cell.bot[1], cell.bot[2]]) - particle.r),
+            #         get_theta(cell_center - particle.r, np.array([cell.bot[0], cell.top[1], cell.bot[2]]) - particle.r),
+            #         get_theta(cell_center - particle.r, np.array([cell.bot[0], cell.bot[1], cell.top[2]]) - particle.r))
+            #
+            # if theta > 2 * t:
+            #     force += cell.mass * particle.mass / np.linalg.norm(cell.bary - particle.r) ** 2
 
-            if theta > 2 * t:
-                force += cell.mass * particle.mass / np.linalg.norm(cell.bary - particle.r)**2
+            # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+            # the circle approximation is way faster even though it will miss interpret some boxes. exact calculation
+            # has to much overhead and cant compensate. To be examined is the performance for unequally distributed
+            # systems that may have differently shaped boxes.
+            # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+            if theta > 2 * np.arctan(cell.max_radius / np.linalg.norm(((cell.bot + cell.top) / 2) - particle.r)):
+                force -= cell.mass * particle.mass * (cell.center - particle.r) / np.linalg.norm(
+                    cell.center - particle.r) ** 3
 
             else:
                 if cell.isLeaf:
-                    force += particle.get_force(cell.particles)
+                    force -= particle.get_force(cell.particles)
                 else:
                     cell_queue.append(cell.child_bot)
                     cell_queue.append(cell.child_top)
+        return force * 0.01720209895
 
-    def leapfrog(self, dt):
-        self.re_center_weight()
+    # def leapfrog(self, dt, theta):
+    #     # self.re_center_weight()
+    #     self.calc_bary_weight()
+    #     # map(lambda p: p.update_vel(self.get_forces(p, theta), dt / 2), self.particles)
+    #     [p.update_vel(self.get_forces(p, theta), dt / 2) for p in self.particles]
+    #     # map(lambda p: p.update_pos(dt), self.particles)
+    #     [p.update_pos(dt) for p in self.particles]
+    #     # self.re_center_weight()
+    #     self.calc_bary_weight()
+    #     # map(lambda p: p.update_vel(self.get_forces(p, theta), dt / 2), self.particles)
+    #     [p.update_vel(self.get_forces(p, theta), dt / 2) for p in self.particles]
+    #     self.reorder_tree()
+    #     return
 
+    def leapfrog(self, dt, theta):
+        self.calc_bary_weight()
+        particles_array = self.get_particles()
+        for p in particles_array:
+            p.update_vel(self.get_forces(p, theta), dt / 2)
+        for p in particles_array:
+            p.update_pos(dt)
+        self.reorder_tree()
+        self.calc_bary_weight()
+        for p in particles_array:
+            p.update_vel(self.get_forces(p, theta), dt / 2)
+        # t = time()
+        self.reorder_tree()
+        # print("reorder", time()-t)
         return

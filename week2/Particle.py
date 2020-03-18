@@ -1,3 +1,16 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""Name:      Padua, Simon
+   Email:     simon.padua@uzh.ch
+   Date:      11 March, 2020
+   Kurs:      ESC202
+   Semester:  FS20
+   Week:      4
+   Thema:     Gravity Tree (Note: code from quad tree but simpler and in strict binary-tree form)
+"""
+
+
 import numpy as np
 
 
@@ -8,10 +21,6 @@ class Particle:
         self.mass = m
         self.radius = r
 
-    def distance(self, pos_vec):
-        dist_vec = self.r - np.array(pos_vec)
-        return np.sqrt(np.dot(dist_vec, dist_vec))
-
     def update_vel(self, acc_vec, dt):
         self.v += np.array(acc_vec) * dt
 
@@ -21,5 +30,7 @@ class Particle:
     def get_force(self, paritcle_arr):
         force = np.zeros_like(self.v)
         for p in paritcle_arr:
-            force += p.mass / self.distance(p.r)**2
+            # if p == self:
+            #     continue
+            force += p.mass * (self.r - p.r) / (np.linalg.norm(self.r - p.r)**3 + np.finfo(float).eps)
         return force * self.mass

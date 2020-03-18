@@ -21,14 +21,22 @@ def gen_particle(N, type="random"):
 
 
 def draw_N_clostest(root: Cell, N, ax):
-    close_test = root.N_closest(root.particles[0], N)
+    close_test, visited = root.N_closest(root.particles[0], N)
     x_close_test = []
     y_close_test = []
     for p in close_test:
         x_close_test.append(p[0].r[0])
         y_close_test.append(p[0].r[1])
-    ax.scatter(x_close_test, y_close_test, c='orange', alpha=.5, linewidths=5)
-    ax.scatter(root.particles[0].r[0], root.particles[0].r[1], c='yellow', alpha=1, linewidths=5)
+
+    x_visited_test = []
+    y_visited_test = []
+    for p in visited:
+        x_visited_test.append(p.r[0])
+        y_visited_test.append(p.r[1])
+
+    ax.scatter(x_visited_test, y_visited_test, c='orange', alpha=.5, linewidths=4)
+    ax.scatter(x_close_test, y_close_test, c='green', alpha=.5, linewidths=4)
+    ax.scatter(root.particles[0].r[0], root.particles[0].r[1], c='yellow', alpha=1, linewidths=6)
 
 def draw_ball_walk(root: Cell, pos_vec, range, ax):
     range_test = root.ballwalk(np.array(pos_vec), range)

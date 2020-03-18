@@ -107,6 +107,7 @@ class Cell:
             return list_tup + [tup]
 
         sort_cell_queue = [(self, self.cell_min_dist(particle.r))]
+        visited_particles = []
         N_closest = [(particle, float('inf')) for _ in range(N+1)]  # N+1 since particle is part of tree
                 # replaced None with paritcle to avoid drawing error. !!! TODO: handle exeptions/invalid inputs
         while (N_closest[-1][1] > sort_cell_queue[0][1]):
@@ -116,13 +117,14 @@ class Cell:
                     sort_cell_queue = insert_into_sort_list(sort_cell_queue, (cell, cell.cell_min_dist(particle.r)))
             else:
                 for p in cell_tup[0].particles:
+                    visited_particles.append(p)
                     distance = p.distance(particle.r)
                     if N_closest[-1][1] > distance:
                         N_closest.pop()
                         N_closest = insert_into_sort_list(N_closest, (p, distance))
             if len(sort_cell_queue) <= 0:
                 break
-        return N_closest
+        return N_closest, visited_particles
 
     def draw_Cells(self, ax):
         if self.isLeaf:
