@@ -18,11 +18,12 @@ class Particle:
     def __init__(self, x, y, z, vx, vy, vz, m, r):
         self.r = np.array([x, y, z])
         self.v = np.array([vx, vy, vz])
+        self.a = np.zeros_like(self.v)
         self.mass = m
         self.radius = r
 
     def update_vel(self, acc_vec, dt):
-        self.v += np.array(acc_vec) * dt
+        self.v += acc_vec * dt
 
     def update_pos(self, dt):
         self.r += self.v * dt

@@ -11,6 +11,7 @@
 """
 
 import numpy as np
+from time import time
 from matplotlib import pyplot as plt
 from matplotlib import animation
 
@@ -56,8 +57,31 @@ def numpy_add():
     print(a)
 
 
+def test1():
+    test = np.random.random(10000000)
+    t2 = time()
+    min2, max2 = 1, 0
+    for i in range(10000000):
+        min2 = min(min2, test[i])
+        max2 = max(max2, test[i])
+    print(min2, max2, "time:", time() - t2)
+    t1 = time()
+    x = []
+    for i in range(10000000):
+        x.append(test[i])
+    min1, max1 = min(x), max(x)
+    print(min1, max1, "time:", time() - t1)
+    t3 = time()
+    min3, max3 = 1, 0
+    for i in range(10000000):
+        if test[i] < min3:
+            min3 = test[i]
+        if test[i] > max3:
+            max3 = test[i]
+    print(min2, max2, "time:", time() - t3)
+
 def main():
-    numpy_add()
+    test1()
 
 
 if __name__ == "__main__":

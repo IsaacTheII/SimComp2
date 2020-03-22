@@ -218,17 +218,24 @@ class Cell:
             # systems that may have differently shaped boxes.
             # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-            if theta > 2 * np.arctan(cell.max_radius / np.linalg.norm(((cell.bot + cell.top) / 2) - particle.r)):
-                force -= cell.mass * particle.mass * (cell.center - particle.r) / np.linalg.norm(
-                    cell.center - particle.r) ** 3
+            # if theta > 2 * np.arctan(cell.max_radius / np.linalg.norm(((cell.bot + cell.top) / 2) - particle.r)):
+            #     force -= cell.mass * particle.mass * (cell.center - particle.r) / np.linalg.norm(
+            #         cell.center - particle.r) ** 3
+
+            if theta > self.max_radius / np.linalg.norm(((cell.bot + cell.top) / 2) - particle.r):
+                force -= cell.mass * (cell.center - particle.r) / np.linalg.norm(cell.center - particle.r) ** 3
 
             else:
-                if cell.isLeaf:
-                    force -= particle.get_force(cell.particles)
-                else:
+                if not cell.isLeaf:
                     cell_queue.append(cell.child_bot)
                     cell_queue.append(cell.child_top)
-        return force * 0.01720209895
+                # if cell.isLeaf:
+                #     # force -= particle.get_force(cell.particles)
+                #     pass
+                # else:
+                #     cell_queue.append(cell.child_bot)
+                #     cell_queue.append(cell.child_top)
+        return force * 0.01720209895 ** 2
 
     # def leapfrog(self, dt, theta):
     #     # self.re_center_weight()
