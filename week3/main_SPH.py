@@ -1,7 +1,20 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""Name:      Simon Padua
+   Email:     simon.padua@uzh.ch
+   Date:      01/04/2020
+   Course:    ESC202
+   Semester:  
+   Week:      3
+   Thema:     SPH
+"""
+
+
 import numpy as np
 import matplotlib.pyplot as plt
-from week1.Particle import Particle
-from week1.TreeCode import Cell
+from week3.Particle import Particle
+from week3.TreeCode_SPH import Cell
 
 def gen_particle(N, type="random"):
     if type == "random":
@@ -18,41 +31,6 @@ def gen_particle(N, type="random"):
                     Particle((x + np.random.normal(scale=1.6) / s) % 1, (y + np.random.normal(scale=1.6) / s) % 1, 0, 0,
                              1))
         return particles
-
-
-def draw_N_clostest(root: Cell, N, ax):
-    close_test, visited = root.N_closest(root.particles[0], N)
-    x_close_test = []
-    y_close_test = []
-    for p in close_test:
-        x_close_test.append(p[0].r[0])
-        y_close_test.append(p[0].r[1])
-
-    x_visited_test = []
-    y_visited_test = []
-    for p in visited:
-        x_visited_test.append(p.r[0])
-        y_visited_test.append(p.r[1])
-
-    ax.scatter(x_visited_test, y_visited_test, c='orange', alpha=.5, linewidths=4)
-    ax.scatter(x_close_test, y_close_test, c='green', alpha=.5, linewidths=4)
-    ax.scatter(root.particles[0].r[0], root.particles[0].r[1], c='yellow', alpha=1, linewidths=6)
-
-def draw_ball_walk(root: Cell, pos_vec, range, ax):
-    range_test = root.ballwalk(np.array(pos_vec), range)
-    x_range_test = []
-    y_range_test = []
-    for p in range_test:
-        x_range_test.append(p[0].r[0])
-        y_range_test.append(p[0].r[1])
-    ax.scatter(x_range_test, y_range_test, c='red', alpha=.5)
-
-
-def make_new_tree(size, rand_ver):
-    particles = gen_particle(size, rand_ver)
-    root = Cell([0, 0], [1, 1], 20, None)
-    root.insert(particles)
-    return root
 
 def main():
     fig = plt.figure(figsize=(10, 10))
@@ -78,3 +56,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

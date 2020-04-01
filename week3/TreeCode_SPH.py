@@ -144,15 +144,16 @@ class Cell:
     def cell_min_dist(self, pos_vec):
         dist = np.array(pos_vec) - self.pivot
         return np.sqrt(np.dot(dist, dist)) - self.max_radius
-    
+    """
+
     def N_closest(self, particle: Particle, N: int):
-    
+
         def insert_into_sort_list(list_tup, tup):
             for i in range(len(list_tup)):
                 if list_tup[i][1] > tup[1]:
                     return list_tup[:i] + [tup] + list_tup[i:]
             return list_tup + [tup]
-    
+
         sort_cell_queue = [(self, self.cell_min_dist(particle.r))]
         N_closest = [(particle, float('inf')) for _ in range(N + 1)]  # N+1 since particle is part of tree
         # replaced None with paritcle to avoid drawing error. !!! TODO: handle exeptions/invalid inputs
@@ -170,7 +171,6 @@ class Cell:
             if len(sort_cell_queue) <= 0:
                 break
         return N_closest
-    """
 
     def draw_Cells(self, ax):
         if self.isLeaf:
@@ -288,3 +288,13 @@ class Cell:
             p.update_pos(dt / 2)
         self.reorder_tree(particles_array)
         return
+
+    def NN_density(self):
+        p: Particle
+        for p in self.particles:
+            p.n_closest = self.N_closest(p, 32)
+            p.h = np.linalg.norm(p.r - p.n_closest[-1].r) * .5
+        for p in self.particles:
+            p.density = 0
+            for other in p.n_closest:
+                p.density += other.mass * p.monoghan_kernel(other)
