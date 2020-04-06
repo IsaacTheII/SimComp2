@@ -14,12 +14,15 @@ import numpy as np
 
 
 class Particle:
-    def __init__(self, x, y, z, vx, vy, vz, m, r):
-        self.r = np.array([x, y, z])
-        self.v = np.array([vx, vy, vz])
+    def __init__(self, pos_vec, vel_vec, m, r, _e=None, _c=None):
+        self.r = np.array(pos_vec)
+        self.v = np.array(vel_vec)
+        self.v_pred = np.array(vel_vec)
         self.a = np.zeros_like(self.v)
-        self.c = None
-        self.e = None
+        self.e = _e
+        self.e_pred = _e
+        self.e_dot = 0.0
+        self.c = _c
         self.density = 0.0
         self.n_closest = []
         self.mass = m
@@ -27,13 +30,16 @@ class Particle:
         self.h = 0.0
 
     def dist(self, other):
-        return np.linal.norm(self.r - other.r)
+        dist = self.r - other.r
+        return np.sqrt(dist.dot(dist))
+        # return np.linalg.norm(self.r - other.r)
 
     def update_vel(self, acc_vec, dt):
         self.v += acc_vec * dt
 
     def update_pos(self, dt):
         self.r += self.v * dt
+        self.r %= 1 + np.finfo(float).eps
 
     def get_force(self, particle_arr):
         force = np.zeros_like(self.v)
@@ -43,14 +49,19 @@ class Particle:
             force += p.mass * (self.r - p.r) / (np.linalg.norm(self.r - p.r) ** 3 + np.finfo(float).eps)
         return force * self.mass
 
-    def monoghan_kernel(self, other):
-        dist = self.dist(other)
+    def monoghan_kernel(self, other, dist):
+        # dist = self.dist(other)
         sigma = 8 / np.pi
-        sim_h = (self.h + other.h) / 2  # TODO: check if better to symmetries the kernel
-        dist_h = dist / sim_h
+        # sim_h = (self.h + other.h) / 2  # TODO: check if better to symmetries the kernel
+        dist_h = dist / self.h
         if dist_h < .5:
-            return sigma / sim_h ** 3 * (6 * dist_h ** 3 - 6 * dist_h ** 2 + 1)
+            return sigma / self.h ** 3 * (6 * dist_h ** 3 - 6 * dist_h ** 2 + 1)
         elif dist_h <= 1:
-            return sigma / sim_h ** 3 * 2 * (1 - dist_h) ** 3
+            return sigma / self.h ** 3 * 2 * (1 - dist_h) ** 3
         else:
-            return 0    # we need to check if dist/h is larger then 1 since we symmetrizing it.
+            return 0  # we need to check if dist/h is larger then 1 since we symmetrizing it.
+
+    def viscosity(self, other):
+        alpha, beta = 1, 2
+        v_r = (self.v - other.v) * (self.r - other.r)
+        u_ab = (self.h + other.h) / 2 * v_r

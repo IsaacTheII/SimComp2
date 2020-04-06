@@ -12,8 +12,9 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-from Particle import Particle
-from time import time
+from week3.Particle import Particle
+from copy import copy
+from time import time, perf_counter
 
 
 class Cell:
@@ -48,25 +49,6 @@ class Cell:
             else:
                 cell_queue += [cell.child_bot, cell.child_top]
         return particles_array
-
-    def calc_bary_weight(self):
-        if self.isLeaf:
-            self.mass = 0
-            self.center_of_mass = float(0)
-            p: Particle
-            for p in self.particles:
-                self.mass += p.mass
-                self.center_of_mass += p.r * p.mass
-            if self.mass:
-                self.center_of_mass = self.center_of_mass / self.mass  # TODO why does this not trigger exeption
-                self.density = self.mass / np.cumproduct(self.bot - self.top)[-1]
-        else:
-            bot_mass, bot_center = self.child_bot.calc_bary_weight()
-            top_mass, top_center = self.child_top.calc_bary_weight()
-            self.mass = bot_mass + top_mass
-            self.center_of_mass = (bot_center * bot_mass + top_center * top_mass) / self.mass
-            self.density = self.mass / np.cumproduct(self.bot - self.top)[-1]
-        return self.mass, self.center_of_mass
 
     def split(self, particle_arr):
         self.isLeaf = False
@@ -109,20 +91,11 @@ class Cell:
         return self
 
     def reorder_tree(self, particles):
-        x, y, z = [], [], []
-        for p in particles:
-            x.append(p.r[0])
-            y.append(p.r[1])
-            z.append(p.r[2])
-        ymin, ymax = min(x), max(x)
-        xmin, xmax = min(y), max(y)
-        zmin, zmax = min(z), max(z)
-        self = Cell([ymin, xmin, zmin], [ymax, xmax, zmax], self.max_s, self.parent)
+        self = Cell([0, 0, 0], [1, 1, 0], self.max_s, self.parent)
         self.insert(particles)
         return self
 
     # this code is not yet updated to the new tree structure
-    """
     def ballwalk(self, pos_vec: np.ndarray, max_dist: float) -> list:
         particles_inrange = []
         diag_dist_vec = self.top - self.bot
@@ -140,14 +113,12 @@ class Cell:
                     particles_inrange += cell.ballwalk(pos_vec, max_dist)
                 return particles_inrange
         return []
-    
+
     def cell_min_dist(self, pos_vec):
-        dist = np.array(pos_vec) - self.pivot
-        return np.sqrt(np.dot(dist, dist)) - self.max_radius
-    """
+        dist = np.array(pos_vec) - self.center_of_volume
+        return np.sqrt(dist.dot(dist)) - self.max_radius
 
     def N_closest(self, particle: Particle, N: int):
-
         def insert_into_sort_list(list_tup, tup):
             for i in range(len(list_tup)):
                 if list_tup[i][1] > tup[1]:
@@ -157,19 +128,75 @@ class Cell:
         sort_cell_queue = [(self, self.cell_min_dist(particle.r))]
         N_closest = [(particle, float('inf')) for _ in range(N + 1)]  # N+1 since particle is part of tree
         # replaced None with paritcle to avoid drawing error. !!! TODO: handle exeptions/invalid inputs
-        while (N_closest[-1][1] > sort_cell_queue[0][1]):
-            cell_tup = sort_cell_queue.pop(0)
-            if not cell_tup[0].isLeaf:
-                for cell in cell_tup[0].child.values():
-                    sort_cell_queue = insert_into_sort_list(sort_cell_queue, (cell, cell.cell_min_dist(particle.r)))
-            else:
-                for p in cell_tup[0].particles:
-                    distance = p.distance(particle.r)
+        while N_closest[-1][1] > sort_cell_queue[0][1]:
+            (cell, _) = sort_cell_queue.pop(0)
+            if cell.isLeaf:
+                for p in cell.particles:
+                    distance = p.dist(particle)
                     if N_closest[-1][1] > distance:
                         N_closest.pop()
                         N_closest = insert_into_sort_list(N_closest, (p, distance))
+            else:
+                if cell.child_bot is not None:
+                    sort_cell_queue = insert_into_sort_list(sort_cell_queue,
+                                                            (cell.child_bot, cell.child_bot.cell_min_dist(particle.r)))
+                if cell.child_top is not None:
+                    sort_cell_queue = insert_into_sort_list(sort_cell_queue,
+                                                            (cell.child_top, cell.child_top.cell_min_dist(particle.r)))
+
             if len(sort_cell_queue) <= 0:
                 break
+
+        return N_closest
+
+    def cell_min_dist_pb(self, pos_vec, off_vec):
+        dist = pos_vec - (self.center_of_volume + off_vec)
+        return np.sqrt(dist.dot(dist)) - self.max_radius
+
+    def N_closest_periodic_boundary(self, particle: Particle, N: int):
+        def insert_into_sort_list(list_tup, tup):
+            for i in range(len(list_tup)):
+                if list_tup[i][1] > tup[1]:
+                    return list_tup[:i] + [tup] + list_tup[i:]
+            return list_tup + [tup]
+
+        # sort_cell_queue = [(self, self.cell_min_dist(particle.r))]
+        sort_cell_queue = []
+        for x in [-1, 0, 1]:
+            for y in [-1, 0, 1]:
+                # for z in [-1, 0, 1]:
+                off_vec = (self.top - self.bot) * [x, y, 0]
+                # sort_cell_queue.append((self, self.cell_min_dist_pb(particle.r, off_vec), off_vec))
+                sort_cell_queue = insert_into_sort_list(sort_cell_queue,
+                                                        (self,
+                                                         self.cell_min_dist_pb(particle.r, off_vec),
+                                                         off_vec))
+
+        N_closest = [(particle, float('inf')) for _ in range(N + 1)]  # N+1 since particle is part of tree
+        # replaced None with paritcle to avoid drawing error. !!! TODO: handle exeptions/invalid inputs
+        while (N_closest[-1][1] > sort_cell_queue[0][1]):
+            (cell, _, off_vec) = sort_cell_queue.pop(0)
+            if cell.isLeaf:
+                for p in cell.particles:
+                    distance = np.linalg.norm((p.r + off_vec) - particle.r)
+                    if N_closest[-1][1] > distance:
+                        N_closest.pop()
+                        N_closest = insert_into_sort_list(N_closest, (p, distance))
+            else:
+                if cell.child_bot is not None:
+                    sort_cell_queue = insert_into_sort_list(sort_cell_queue,
+                                                            (cell.child_bot,
+                                                             cell.child_bot.cell_min_dist_pb(particle.r, off_vec),
+                                                             off_vec))
+                if cell.child_top is not None:
+                    sort_cell_queue = insert_into_sort_list(sort_cell_queue,
+                                                            (cell.child_top,
+                                                             cell.child_top.cell_min_dist_pb(particle.r, off_vec),
+                                                             off_vec))
+
+            if len(sort_cell_queue) <= 0:
+                break
+
         return N_closest
 
     def draw_Cells(self, ax):
@@ -187,114 +214,26 @@ class Cell:
             self.child_top.draw_Cells(ax)
         return
 
-    def ani_Cells(self, ax, artist):
-        if self.isLeaf:
-            x, y = [], []
-            for p in self.particles:
-                x.append(p.r[0])
-                y.append(p.r[1])
-            artist.append(ax.plot(x, y, 'o', c='blue', alpha=.5, linewidth=.3))
-            # with_height = self.top - self.bot
-            # artist.append(
-            #     ax.add_patch(plt.Rectangle((self.bot[0], self.bot[1]), with_height[0], with_height[1], facecolor='none',
-            #                                edgecolor='lightgreen')))
-        else:
-            artist.append(self.child_bot.draw_Cells(ax))
-            artist.append(self.child_top.draw_Cells(ax))
-        return artist
+    #
+    # def drift1(self,particles_array, dt):
+    #     p: Particle
+    #     for p in particles_array:
+    # def SPH_leapfrog(self, particles_array, dt):
+    #
 
-    def get_forces(self, particle: Particle, theta):
-        force = np.zeros_like(particle.v)
-        cell_dist = np.linalg.norm(self.center_of_mass - particle.r)  # - self.max_radius
-        if cell_dist > self.max_radius / theta and self.mass:
-            # the machine epsilon can be viewed as softening and is needed to avoid a check for div by zero
-            dist = np.linalg.norm(self.center_of_mass - particle.r) + np.finfo(float).eps
-            force += 0.01720209895 ** 2 * self.mass * (self.center_of_mass - particle.r) / (
-                    dist ** 3)
-        else:
-            if self.isLeaf:
-                if self.mass:
-
-                    for p in self.particles:
-                        dist = np.linalg.norm(p.r - particle.r) + np.finfo(float).eps
-                        force += 0.01720209895 ** 2 * p.mass * (p.r - particle.r) / (dist ** 3)
-            else:
-                force += self.child_bot.get_forces(particle, theta)
-                force += self.child_top.get_forces(particle, theta)
-        return force
-
-    # def leapfrog(self, dt, theta):
-    #     # self.re_center_weight()
-    #     self.calc_bary_weight()
-    #     # map(lambda p: p.update_vel(self.get_forces(p, theta), dt / 2), self.particles)
-    #     [p.update_vel(self.get_forces(p, theta), dt / 2) for p in self.particles]
-    #     # map(lambda p: p.update_pos(dt), self.particles)
-    #     [p.update_pos(dt) for p in self.particles]
-    #     # self.re_center_weight()
-    #     self.calc_bary_weight()
-    #     # map(lambda p: p.update_vel(self.get_forces(p, theta), dt / 2), self.particles)
-    #     [p.update_vel(self.get_forces(p, theta), dt / 2) for p in self.particles]
-    #     self.reorder_tree()
-    #     return
-
-    def leapfrogprint(self, dt, theta):
-        # kick-drift-kick
-        global counter
-        counter = 0
-        self.calc_bary_weight()
-        particles_array = self.get_particles()
-        t = time()
-        for p in particles_array:
-            p.a *= 0
-        print("zero", time() - t)
-        t = time()
-        for p in particles_array:
-            p.update_vel(self.get_forces(p, theta), dt / 2)
-        print("vel1", time() - t)
-        t = time()
-        for p in particles_array:
-            p.update_pos(dt)
-        print("pos", time() - t)
-        t = time()
-        self.reorder_tree(self.get_particles())
-        print("reorder", time() - t)
-        t = time()
-        self.calc_bary_weight()
-        print("cal", time() - t)
-        t = time()
-        for p in particles_array:
-            p.a *= 0
-        print("zero", time() - t)
-        t = time()
-        for p in particles_array:
-            p.update_vel(self.get_forces(p, theta), dt / 2)
-        print("vel2", time() - t)
-        t = time()
-        # t = time()
-        self.reorder_tree(self.get_particles())
-        print("counter", counter)
-        # print("reorder", time()-t)
-        return
-
-    def leapfrog(self, particles_array, dt, theta):
-        # drift-kick-drift
-        for p in particles_array:
-            p.update_pos(dt / 2)
-        self.reorder_tree(particles_array)
-        self.calc_bary_weight()
-        for p in particles_array:
-            p.update_vel(self.get_forces(p, theta), dt)
-        for p in particles_array:
-            p.update_pos(dt / 2)
-        self.reorder_tree(particles_array)
-        return
-
-    def NN_density(self):
+    def NN_density(self, particle_array):
         p: Particle
-        for p in self.particles:
-            p.n_closest = self.N_closest(p, 32)
-            p.h = np.linalg.norm(p.r - p.n_closest[-1].r) * .5
-        for p in self.particles:
+        for p in particle_array:
+            p.n_closest = self.N_closest_periodic_boundary(p, 32)
+            # p.n_closest = self.N_closest(p, 32)
+            p.h = p.n_closest[-1][1] * .5
+        for p in particle_array:
             p.density = 0
-            for other in p.n_closest:
-                p.density += other.mass * p.monoghan_kernel(other)
+            for (other, dist) in p.n_closest:
+                # test = other.mass * p.monoghan_kernel(other, dist)
+                p.density += other.mass * p.monoghan_kernel(other, dist)
+
+    def calc_sound(self, particle_array):
+        p: Particle
+        for p in particle_array:
+            p.e_pred

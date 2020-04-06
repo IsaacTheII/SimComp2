@@ -69,7 +69,7 @@ def main():
     ax1.set_xlim(-0.1, 1.1)
     ax1.set_ylim(-0.1, 1.1)
 
-    size, n_closest = 1000, 100
+    size, n_closest = 10000, 100
 
     t1 = time()
     root = make_new_tree(size, "pseudo_coherent")

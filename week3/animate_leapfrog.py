@@ -167,7 +167,7 @@ def main():
     def update(frame):
         print(frame)
         t1 = time()
-        iterations = 1
+        iterations = 10
         for _ in range(iterations):
             root.leapfrog(particles, dt, theta)
         print("integration ", (time() - t1) / iterations)
