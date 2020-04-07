@@ -32,6 +32,49 @@ print()
 
 a = np.array([1,2,3])
 b = np.array([6,7,8])
+list1 = [np.array([6,7,8]) for _ in range(1000000)]
+list2 = [np.array([6,7,8]) for _ in range(1000000)]
+list3 = [np.array([6,7,8]) for _ in range(1000000)]
+
+
+t = time()
+for i in range(1000000):
+    np.dot(a, b)
+print(time() - t)
+
+t = time()
+for i in range(1000000):
+    a.dot(b)
+print(time() - t)
+
+
+t = time()
+for i in range(10000000):
+    a-b
+print(time() - t)
+
+t = time()
+for i in range(10000000):
+    np.subtract(a, b)
+print(time() - t)
+
+
+
+t = time()
+for i in range(1000000):
+    list1[i] = np.zeros(3)
+print(time() - t)
+
+t = time()
+for i in range(1000000):
+    list2[i] = np.zeros_like(list2[i])
+print(time() - t)
+
+t = time()
+for i in range(1000000):
+    list3[i] * 0
+print(time() - t)
+
 
 t = time()
 for _ in range(100000):

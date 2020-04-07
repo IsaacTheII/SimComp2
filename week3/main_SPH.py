@@ -45,14 +45,10 @@ def gen_particle(N, type="random"):
         N = N ** 2
         for x in range(Iter):
             for y in range(Iter):
-                if x == N / 2 + .5 and y == N / 2 + .5:
-                    particles.append(Particle([x * spaceing + spaceing / 2, y * spaceing + spaceing / 2, 0],
-                                              [0, 0, 0],
-                                              1 / N, .00001275, 100, 2 ** .5))
-                else:
-                    particles.append(Particle([x * spaceing + spaceing / 2, y * spaceing + spaceing / 2, 0],
-                                              [0, 0, 0],
-                                              1 / N, .00001275, 1, 2 ** .5))
+                particles.append(Particle([x * spaceing + spaceing / 2, y * spaceing + spaceing / 2, 0],
+                                          [0, 0, 0],
+                                          1 / N, .00001275, 1, 2 ** .5))
+        particles[(N - 1) // 2].e = 2
         return particles
 
 
@@ -62,7 +58,7 @@ def get_particle_prop(particle_array):
         x.append(p.r[0])
         y.append(p.r[1])
         z.append(p.r[2])
-        d.append(p.density)
+        d.append(p.e)
     return x, y, z, d
 
 
@@ -111,11 +107,14 @@ def main():
     # particles = read_data("esc202-planetesimals/ESC202-planetesimals.dat") # gen_particle(1000, "random") +
     # particles = gen_particle(100000, "pseudo_coherent")
     # particles = gen_particle(1000, "random")
-    particles = gen_particle(41, "Sedov-Taylor-Explosion")
+    particles = gen_particle(11, "Sedov-Taylor-Explosion")
 
     root = init_tree(particles)
     # root.NN_density(particles)
-    root.NN_density(particles)
+    # root.NN_density(particles)
+    for _ in range(10):
+        print(_)
+        root.SPH_leapfrog(particles, 0.0001)
 
     x, y, z, d = get_particle_prop(particles)
     print(min(d), max(d))

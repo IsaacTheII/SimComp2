@@ -16,6 +16,9 @@ from week3.Particle import Particle
 from copy import copy
 from time import time, perf_counter
 
+global gamma
+gamma = 5 / 3
+
 
 class Cell:
     def __init__(self, lowerleft, upperright, max_size, parent):
@@ -24,7 +27,8 @@ class Cell:
         self.mass = 0
         self.max_s = max_size
         self.center_of_volume = (self.bot + self.top) / 2
-        self.max_radius = np.linalg.norm(self.top - self.bot) / 2
+        diag = self.top - self.bot
+        self.max_radius = np.sqrt(diag.dot(diag)) / 2
         self.parent = parent
         self.particles = []
         self.isLeaf = True
@@ -32,7 +36,6 @@ class Cell:
         self.split_Dim: int
         self.has_bary_weight = False  # probalby better to just calc for all branches since every cell will
         self.center_of_mass = None  # need to be calc at some point.
-        self.density = None
         self.child_bot = None
         self.child_top = None
 
@@ -91,7 +94,7 @@ class Cell:
         return self
 
     def reorder_tree(self, particles):
-        self = Cell([0, 0, 0], [1, 1, 0], self.max_s, self.parent)
+        self = Cell([-0.0000001, -0.000001, 0.], [1.0000001, 1.00000001, 0.], self.max_s, self.parent)
         self.insert(particles)
         return self
 
@@ -214,26 +217,69 @@ class Cell:
             self.child_top.draw_Cells(ax)
         return
 
-    #
-    # def drift1(self,particles_array, dt):
-    #     p: Particle
-    #     for p in particles_array:
-    # def SPH_leapfrog(self, particles_array, dt):
-    #
-
     def NN_density(self, particle_array):
         p: Particle
         for p in particle_array:
-            p.n_closest = self.N_closest_periodic_boundary(p, 32)
+            p.n_closest = self.N_closest_periodic_boundary(p, 64)
             # p.n_closest = self.N_closest(p, 32)
             p.h = p.n_closest[-1][1] * .5
         for p in particle_array:
-            p.density = 0
+            p.rho = 0
             for (other, dist) in p.n_closest:
                 # test = other.mass * p.monoghan_kernel(other, dist)
-                p.density += other.mass * p.monoghan_kernel(other, dist)
+                p.rho += other.mass * p.monoghan_kernel(other, dist)
 
     def calc_sound(self, particle_array):
         p: Particle
         for p in particle_array:
-            p.e_pred
+            p.c = np.sqrt(gamma * (gamma - 1) * p.e_pred)
+
+    def NN_SPH_Force(self, particle_array):
+        p: Particle
+        for p in particle_array:
+            P_a = p.c ** 2 / (gamma * p.rho)
+            other: Particle
+            for (other, dist) in p.n_closest:
+                P_b = other.c ** 2 / (gamma * other.rho)
+                pi_ab = p.viscosity(other)
+                v_a_b = np.sqrt(p.v.dot(p.v)) - np.sqrt(other.v.dot(other.v))
+                F_ab = P_a + P_b + pi_ab
+
+                p.a -= .5 * other.mass * F_ab * p.gradient_monoghan_kernel(other, dist)
+                other.a += .5 * p.mass + F_ab * other.gradient_monoghan_kernel(p, dist)
+
+                p.e_dot += other.mass * (P_a + pi_ab) * v_a_b * p.gradient_monoghan_kernel(other, dist)
+                other.e_dot += p.mass * (P_b + pi_ab) * v_a_b * other.gradient_monoghan_kernel(p, dist)
+
+    def calc_force(self, particle_array):
+        self.reorder_tree(particle_array)
+        for p in particle_array:
+            p.a = np.zeros(3, dtype=float)
+            p.e_dot = 0
+        self.NN_density(particle_array)
+        self.calc_sound(particle_array)
+        self.NN_SPH_Force(particle_array)
+
+    def drift_1(self, particle_array, dt):
+        p: Particle
+        for p in particle_array:
+            p.update_pos(dt)
+            p.v_pred = p.v + p.a * dt
+            p.e_pred = p.e + p.e_dot * dt
+
+    def kick(self, particle_array, dt):
+        p: Particle
+        for p in particle_array:
+            p.update_vel(dt)
+            p.update_e(dt)
+
+    def drift_2(self, particle_array, dt):
+        p: Particle
+        for p in particle_array:
+            p.update_pos(dt)
+
+    def SPH_leapfrog(self, particle_array, dt):
+        self.drift_1(particle_array, dt)
+        self.calc_force(particle_array)
+        self.kick(particle_array, dt)
+        self.drift_2(particle_array, dt)
